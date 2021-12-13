@@ -1,4 +1,3 @@
-import sys
 import os
 import time
 import telebot
@@ -6,6 +5,7 @@ from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
 import csv
 import requests
+import statistics
 
 bot = telebot.TeleBot(token='2088937738:AAGrYN3kAsyeNS8AMx29W8x7AC20vVX2jlc')
 fresh_list = ['Несколько секунд назад', '1 минуту назад', '2 минуты назад', '3 минуты назад', '4 минуты назад',
@@ -17,6 +17,7 @@ data_set = {}
 state_flag = True
 low_item = []
 max_item = []
+avg_price = []
 
 
 def parser(url, chat_id, flag, state, site):
@@ -70,6 +71,7 @@ def parser(url, chat_id, flag, state, site):
                 max_item.extend((name, year, str(max_price), data, 'https://www.avito.ru' + link))
             data_set.update({'name': name, 'year': year, 'price': price,
                              'data': data, 'link': link})
+            avg_price.append(int(sub_price))
         if state:
             write_in_file(data_set)
         if not check_flag():
@@ -120,7 +122,8 @@ def help_message(message):
                                       ' После чего необходимо указать количество страниц до 100.'
                                       ' Иначе авито упадет!'
                                       '\n/get - позволяет получить документ csv для работы с данными'
-                                      '\n/search - автоматический поиск товаров прямо внутри бота')
+                                      '\n/search - автоматический поиск товаров прямо внутри бота'
+                                      '\n/avg - средняя цена за товар')
 
 
 @bot.message_handler(content_types=['text'])
@@ -142,6 +145,8 @@ def text_message(message):
         get_message(message)
     elif get_message_user == '/start':
         start_message(message)
+    elif get_message_user == '/avg':
+        avg_message(message)
 
 
 @bot.message_handler(commands=['stop'])
@@ -172,6 +177,15 @@ def max_message(message):
         bot.send_message(message.chat.id, 'Товар с макисмальной ценой ->\n' + str(max_item))
 
 
+@bot.message_handler(commands=['avg'])
+def avg_message(message):
+    if not avg_price:
+        bot.send_message(message.chat.id, 'Товара не существует, видимо вы еще не парсили объекты!')
+    else:
+        avg = float('{:.3f}'.format(statistics.mean(avg_price)))
+        bot.send_message(message.chat.id, 'Средняя цена на данный товар: ' + str(avg))
+
+
 @bot.message_handler(commands=['nav'])
 def nav_message(message):
     bot.send_message(message.chat.id, '/search - поиск товара внутри бота.'
@@ -181,7 +195,8 @@ def nav_message(message):
                                       '\n/stop - остановить бота'
                                       '\n/help - посмотреть справку на использование бота'
                                       '\n/low - вывести минимальную цену товара'
-                                      '\n/max - вывести мксимальную цену товара')
+                                      '\n/max - вывести мксимальную цену товара'
+                                      '\n/avg - средняя цена за товар')
 
 
 @bot.message_handler(commands=['get'])
