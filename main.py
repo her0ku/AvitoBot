@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 import time
 import telebot
 from bs4 import BeautifulSoup
@@ -6,18 +7,87 @@ from fake_useragent import UserAgent
 import csv
 import requests
 import statistics
+import psycopg2
+from psycopg2 import Error
 
 bot = telebot.TeleBot(token='2088937738:AAGrYN3kAsyeNS8AMx29W8x7AC20vVX2jlc')
 fresh_list = ['Несколько секунд назад', '1 минуту назад', '2 минуты назад', '3 минуты назад', '4 минуты назад',
               '5 минут назад', '6 минут назад', '7 минут назад', '8 минут назад', '9 минут назад', '10 минут назад',
               '11 минут назад', '12 минут назад', '13 минут назад', '14 минут назад', '15 минут назад',
               '18 минут назад', '20 минут назад', '30 минут назад', '1 час назад']
+
+popular_req = ['iphone', 'bmw', 'audi', 'samsung', 'ear pods', 'ftp', 'toyota', 'automobili', 'imac', 'macbook',
+               'xiaomi',
+               'huawei', 'sony', 'lg', 'google', 'ford']
+
 cards_list = set()
 data_set = {}
 state_flag = True
 low_item = []
 max_item = []
 avg_price = []
+my_conn = psycopg2.connect(user="postgres",
+                           password="root",
+                           host="127.0.0.1",
+                           port="5432",
+                           database="avito_stats_db")
+
+def check_connect():
+    try:
+        connection = my_conn
+
+        cursor = connection.cursor()
+        return True
+    except (Exception, Error) as error:
+        print("Ошибка при работе с PostgreSQL", error)
+        return False
+    finally:
+        if connection:
+            cursor.close()
+            print("Соединение с PostgreSQL закрыто")
+
+
+def insert_result(popular):
+    try:
+        connection = my_conn
+
+        cursor = connection.cursor()
+        postgres_insert_query = """ INSERT INTO avito_statistic (POPULAR_ITEM, DATA)
+                                           VALUES (%s, %s)"""
+        current_date = datetime.today()
+        record_to_insert = (popular, current_date)
+        cursor.execute(postgres_insert_query, record_to_insert)
+        print(cursor)
+
+        connection.commit()
+
+    except (Exception, Error) as error:
+        print("Ошибка при работе с PostgreSQL", error)
+    finally:
+        if connection:
+            cursor.close()
+            print("Соединение с PostgreSQL закрыто")
+
+
+def find_popular_title():
+    try:
+        connection = my_conn
+
+        cursor = connection.cursor()
+        postgres_answ = """ SELECT avito_statistic.popular_item FROM avito_statistic ORDER BY avito_statistic.popular_item DESC LIMIT 1"""
+        cursor.execute(postgres_answ)
+        record = cursor.fetchall()
+        connection.commit()
+        cursor.close()
+        return record
+
+    except (Exception, Error) as error:
+        print("Ошибка при работе с PostgreSQL", error)
+        return 'Ошибка('
+    finally:
+        if connection:
+            cursor.close()
+            print("Соединение с PostgreSQL закрыто")
 
 
 def parser(url, chat_id, flag, state, site):
@@ -111,19 +181,24 @@ def start_message(message):
     keyboard = telebot.types.ReplyKeyboardMarkup(True)
     keyboard.row('Быстрый поиск', 'Вставить свою ссылку', 'Отсановить поиск', 'Навигация по боту')
     bot.send_message(message.chat.id, 'Можете выбрать команду из списка или нажать на кнопку!', reply_markup=keyboard)
+    check_status_base = check_connect()
+    if check_status_base:
+        bot.send_message(message.chat.id, 'База данных работает! Можно выполнять запросы на поиск популярного '
+                                          'товара для парсинга /popular!')
+    else:
+        bot.send_message(message.chat.id, 'База данных временно работает!')
 
 
 @bot.message_handler(commands=['help'])
 def help_message(message):
-    bot.send_message(message.chat.id, '/parse и вы перейдете в парсинг,'
+    bot.send_message(message.chat.id, '/start - проверяет подключение к базе для проверки популярных запросов'
+                                      '\n/parse и вы перейдете в парсинг,'
                                       ' для парсинга указываете ссылку как обычную так и с фильтрами.'
                                       '\nПример ссылки --> https://www.avito.ru/moskva_i_mo/avtomobili, '
                                       'необходимо убрать ?p= при наличии.'
                                       ' После чего необходимо указать количество страниц до 100.'
                                       ' Иначе авито упадет!'
-                                      '\n/get - позволяет получить документ csv для работы с данными'
-                                      '\n/search - автоматический поиск товаров прямо внутри бота'
-                                      '\n/avg - средняя цена за товар')
+                                      ' Также можно искать прямо в самом боте! /search')
 
 
 @bot.message_handler(content_types=['text'])
@@ -147,6 +222,8 @@ def text_message(message):
         start_message(message)
     elif get_message_user == '/avg':
         avg_message(message)
+    elif get_message_user == '/popular':
+        popular_message(message)
 
 
 @bot.message_handler(commands=['stop'])
@@ -186,17 +263,24 @@ def avg_message(message):
         bot.send_message(message.chat.id, 'Средняя цена на данный товар: ' + str(avg))
 
 
+@bot.message_handler(commands=['popular'])
+def popular_message(message):
+    answer = find_popular_title()
+    bot.send_message(message.chat.id, 'самый популярный товар для парсинга! -> ' + str(answer[0]))
+
+
 @bot.message_handler(commands=['nav'])
 def nav_message(message):
-    bot.send_message(message.chat.id, '/search - поиск товара внутри бота.'
-                                      '\n/get - получить csv документ'
-                                      '\n/parse - парсить страницы по ссылке'
-                                      '\n/start - запуск бота'
-                                      '\n/stop - остановить бота'
+    bot.send_message(message.chat.id, '\n/start - запуск бота'
                                       '\n/help - посмотреть справку на использование бота'
+                                      '\n/search - поиск товара внутри бота.'
+                                      '\n/parse - парсить страницы по ссылке'
+                                      '\n/get - получить csv документ'
+                                      '\n/stop - остановить бота'
                                       '\n/low - вывести минимальную цену товара'
                                       '\n/max - вывести мксимальную цену товара'
-                                      '\n/avg - средняя цена за товар')
+                                      '\n/avg - средняя цена за товар'
+                                      '\n/popular - вывести самый популярный товар, который парсят')
 
 
 @bot.message_handler(commands=['get'])
@@ -303,6 +387,9 @@ def write_to_file(message, num, site, header, flag):
         state = True
     else:
         state = False
+    for popular in popular_req:
+        if popular in site:
+            insert_result(popular)
     for i in range(int(num)):
         if 'f=' in site or '?s=' in site or '?q=' in site:
             site = site + '&p=' + str(i)
