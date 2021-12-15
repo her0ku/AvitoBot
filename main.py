@@ -130,6 +130,7 @@ def parser(url, chat_id, flag, state, site):
                 else:
                     print_card(chat_id, name, year, price, data, link)
             sub_price = price.replace('₽', '')
+            sub_price = sub_price.replase('от','')
             sub_price = ''.join(sub_price.split())
             if low_price > int(sub_price):
                 low_price = int(sub_price)
