@@ -10,7 +10,7 @@ import statistics
 import psycopg2
 from psycopg2 import Error
 
-bot = telebot.TeleBot(token='2088937738:AAGrYN3kAsyeNS8AMx29W8x7AC20vVX2jlc')
+bot = telebot.TeleBot(token='')
 fresh_list = ['Несколько секунд назад', '1 минуту назад', '2 минуты назад', '3 минуты назад', '4 минуты назад',
               '5 минут назад', '6 минут назад', '7 минут назад', '8 минут назад', '9 минут назад', '10 минут назад',
               '11 минут назад', '12 минут назад', '13 минут назад', '14 минут назад', '15 минут назад',
